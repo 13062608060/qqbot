@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     迁移后自检：确认 QQ 机器人目录在新机器上是完整可运行的。
 
@@ -99,15 +99,24 @@ if ($running) { Warn "已有 astrbot/node 在运行（可能旧机还在跑？�
 
 Head "9. Git"
 $git = Get-Command git -ErrorAction SilentlyContinue
+if (-not $git) {
+    # 本会话 PATH 可能还是旧的，回退到 PortableGit 常见安装位置
+    $candidate = Join-Path $env:USERPROFILE 'Tools\PortableGit\cmd\git.exe'
+    if (Test-Path $candidate) { $git = Get-Item $candidate }
+}
 if ($git) {
-    Ok "git $(& git --version) -> $($git.Source)"
+    $gitExe = if ($git -is [System.Management.Automation.CommandInfo]) { $git.Source } else { $git.FullName }
+    Ok "$(& $gitExe --version) -> $gitExe"
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        Warn '当前会话 PATH 里没有 git —— 新开一个终端即可（已写入用户 PATH）'
+    }
     Push-Location $ROOT
-    $branch = & git rev-parse --abbrev-ref HEAD 2>$null
+    $branch = & $gitExe rev-parse --abbrev-ref HEAD 2>$null
     if ($LASTEXITCODE -eq 0) {
         Ok "当前分支 $branch"
-        $dirty = & git status --porcelain 2>$null
+        $dirty = & $gitExe status --porcelain 2>$null
         if ($dirty) { Warn "$(@($dirty).Count) 个文件未提交" } else { Ok '工作区干净' }
-        $remote = & git remote -v 2>$null
+        $remote = & $gitExe remote -v 2>$null
         if ($remote) { Ok "已配置远程：$(@($remote)[0])" } else { Warn '未配置远程仓库（无法 push/pull）' }
     } else {
         Warn '这个目录还不是 git 仓库'
