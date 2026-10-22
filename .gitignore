@@ -1,0 +1,41 @@
+# =====================================================================
+#  QQ 小号 AI 机器人 —— Git 忽略规则
+#  原则：只跟踪「源码 / 配置 / 人设与记忆文本」这类小而需要版本化的内容。
+#       运行时、二进制发行包、日志、数据库一律不入库。
+# =====================================================================
+
+# ----- 运行时与二进制发行包（约 1.2 GB，不可跨机复制 venv，改用整目录拷贝/重建）-----
+/runtime/
+/snowluma/
+/downloads/
+
+# ----- AstrBot 运行产物 -----
+astrbot/.astrbot
+astrbot/*.lock
+astrbot/data/logs/
+astrbot/data/temp/
+astrbot/data/attachments/
+astrbot/data/webchat/
+astrbot/data/plugins.json
+
+# ----- 数据库（二进制、每条消息都变；迁移用 export-state 打包，不做版本化）-----
+*.db
+*.db-shm
+*.db-wal
+
+# ----- 脚本产出的传输包 -----
+/_transfer/
+
+# ----- 密钥（真实配置含 DeepSeek API Key 与控制台密码，绝不入库）-----
+astrbot/data/cmd_config.json
+astrbot/data/cmd_config.json.bak
+*.key
+.env
+
+# ----- 通用 -----
+__pycache__/
+*.py[cod]
+*.log
+Thumbs.db
+desktop.ini
+.DS_Store

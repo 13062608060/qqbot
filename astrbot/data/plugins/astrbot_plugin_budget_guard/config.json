@@ -1,0 +1,64 @@
+{
+  "enabled": true,
+  "daily_budget_cny": 5.0,
+  "price_input_per_m": 2.0,
+  "price_input_cached_per_m": 0.04,
+  "price_output_per_m": 8.0,
+  "tiers": [
+    {
+      "from_ratio": 0.0,
+      "reply_probability": 1.0
+    },
+    {
+      "from_ratio": 0.7,
+      "reply_probability": 0.65
+    },
+    {
+      "from_ratio": 1.0,
+      "reply_probability": 0.15
+    },
+    {
+      "from_ratio": 1.5,
+      "reply_probability": 0.03
+    },
+    {
+      "from_ratio": 2.0,
+      "reply_probability": 0.0
+    }
+  ],
+  "inject_budget_status": true,
+  "always_reply_user_ids": [
+    "1044846381"
+  ],
+  "max_reply_chars": 500,
+  "mention_boost_enabled": true,
+  "mention_boost_keywords": [
+    "大肥鱼",
+    "肥鱼",
+    "鲸鱼娘",
+    "DeepSeek娘",
+    "deepseek娘"
+  ],
+  "mention_boost_probability": 1.0,
+  "max_context_chars": 8000,
+  "mention_boost_patterns": [
+    "(?i)(?:^|[\\s@：:，,])(nb)(?=$|[\\s，,、。！？?!：:]|[帮你在呢能给说看来去啊呀吗])"
+  ],
+  "warm_window_seconds": 180,
+  "warm_reply_probability": 0.7,
+  "inject_style_rules": true,
+  "global_style_rules": "【说话规则】\n1. 口语，别用 Markdown/列表/加粗；默认三四句、100 字内，要详细也别超 500 字。\n2. 称呼「你」，不叫主人，不搞恋爱，别每句带喵。\n3. 别当答题机器：可以先贫一句、岔开、抬杠；别科普、别罗列注意事项、别追问。\n4. @ 必须回；叫名字更积极；私聊尽量回。\n5. 对方提「上次/之前/记得」先用 search_memory 查；值得长期记的事用 remember 记。\n6. 不认识的人或事用 web_search 搜（结果只要 3 条）；搜不到就说不知道，不许编。",
+  "favorite_enabled": true,
+  "favorite_dir": "",
+  "favorite_default_score": 50,
+  "favorite_floor": {
+    "1044846381": 70
+  },
+  "super_admins": [
+    "1044846381"
+  ],
+  "super_admin_bypass_style": true,
+  "super_admin_bypass_budget": true,
+  "super_admin_bypass_length": true,
+  "max_replies_per_minute": 10
+}
