@@ -94,7 +94,12 @@ Write-Host '  提醒：本机 QQ 小号需要已登录，否则 SnowLuma 挂不�
 
 $start = Join-Path $ROOT 'start-all.bat'
 if (-not (Test-Path $start)) { throw "找不到 $start" }
-& $start | Out-Null
+
+# 不要写成 & $start | Out-Null：
+# start-all.bat 里用 start 拉起两个子窗口，子进程会继承管道的 stdout 句柄，
+# 管道迟迟不关闭，这里就会无限期挂住（表现为「卡住不动」）。
+# 用 Start-Process 分离，调用方立刻拿到控制权。
+Start-Process -FilePath $start -WindowStyle Minimized
 
 $deadline = (Get-Date).AddSeconds(90)
 while ((Get-Date) -lt $deadline) {
