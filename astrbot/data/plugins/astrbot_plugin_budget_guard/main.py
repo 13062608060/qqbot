@@ -27,6 +27,11 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
+try:
+    from astrbot.api.message_components import Image
+except Exception:  # noqa: BLE001
+    Image = None
+
 try:  # 群聊判断用，导入失败不影响其他功能
     from astrbot.api.platform import MessageType
 except Exception:  # noqa: BLE001
@@ -64,6 +69,23 @@ DEFAULT_CONFIG = {
     "always_reply_user_ids": [],
     "max_reply_chars": 500,
     "max_context_chars": 4000,
+    "context_overrides": {},
+    "mixed_mode_umos": {},
+    "proactive": {"enabled": False, "quiet_start": 0, "quiet_end": 8, "targets": []},
+    "proactive_pool": ["在干嘛", "睡了没", "忙啥呢", "人呢"],
+    "attitude_positive_keywords": [
+        "谢谢", "贴贴", "抱抱", "喜欢你", "可爱", "辛苦", "亲亲", "么么",
+        "好想你", "乖", "求你了", "你最好了", "爱你", "嘿嘿",
+    ],
+    "attitude_negative_keywords": [
+        "滚", "闭嘴", "烦死", "你有病", "神经病", "傻逼", "废物", "没用",
+        "别烦我", "无语", "懒得", "你tm", "你他妈", "恶心", "讨厌你",
+    ],
+    "auto_memory_umos": [],
+    "auto_memory_keywords": [
+        "约定", "计划", "下周", "明天", "生日", "考试", "面试", "医院",
+        "生病", "加班", "搬家", "旅行", "喜欢", "讨厌", "难受", "难过", "开心", "记得",
+    ],
     "max_replies_per_minute": 10,
     "mention_boost_enabled": True,
     "mention_boost_keywords": ["大肥鱼", "肥鱼", "鲸鱼娘", "DeepSeek娘", "deepseek娘"],
@@ -307,8 +329,9 @@ class BudgetGuard(Star):
 
     # ---------- 上下文 ----------
 
-    def _trim_context(self, req) -> None:
-        limit = int(self.cfg.get("max_context_chars", 4000) or 0)
+    def _trim_context(self, req, umo: str = "") -> None:
+        overrides = self.cfg.get("context_overrides") or {}
+        limit = int(overrides.get(umo) or self.cfg.get("max_context_chars", 4000) or 0)
         contexts = getattr(req, "contexts", None)
         if not contexts:
             return
@@ -367,6 +390,7 @@ class BudgetGuard(Star):
 
     @filter.on_llm_response()
     async def account(self, event: AstrMessageEvent, llm_response) -> None:
+
         usage = getattr(llm_response, "usage", None)
         self._maybe_reload()
         cost = self._cost(usage)
@@ -384,6 +408,21 @@ class BudgetGuard(Star):
         self._maybe_reload()
         if not self.cfg.get("enabled", True):
             return
+
+        # 记录「她今天说过话」，供主动私聊判断
+        try:
+            sender = str(event.get_sender_id())
+            targets = (self.cfg.get("proactive") or {}).get("targets") or []
+            if any(str(t.get("user_id")) == sender for t in targets):
+                sp = PLUGIN_DIR / "proactive_state.json"
+                st = _read_json(sp, {})
+                rec = dict(st.get(event.unified_msg_origin) or {})
+                rec["incoming_date"] = _today()
+                st[event.unified_msg_origin] = rec
+                _write_json(sp, st)
+        except Exception:  # noqa: BLE001
+            pass
+
         if self.cfg.get("super_admin_bypass_budget", True) and self._is_super_admin(event):
             return
 
@@ -414,7 +453,7 @@ class BudgetGuard(Star):
     async def inject_context(self, event: AstrMessageEvent, req) -> None:
         """拼系统提示：全局规则 -> 好感度 -> （原有）-> 额度 -> 语气 -> 管理/记忆。"""
         self._maybe_reload()
-        self._trim_context(req)
+        self._trim_context(req, event.unified_msg_origin)
 
         is_admin = self._is_super_admin(event)
         head: list[str] = []
@@ -462,6 +501,30 @@ class BudgetGuard(Star):
                 "查用 get_favorability。闲聊最多两句；要文档/代码/清单才写长、才用格式。"
             )
 
+        # 混合模式：按概率决定「学老大」还是「用本来的性格」，并识别她的态度
+        try:
+            mixed = self.cfg.get("mixed_mode_umos") or {}
+            umo = event.unified_msg_origin
+            if umo in mixed:
+                text = getattr(event, "message_str", "") or ""
+                negs = self.cfg.get("attitude_negative_keywords") or []
+                poss = self.cfg.get("attitude_positive_keywords") or []
+                imitate = random.random() < float(mixed[umo])
+                mode = (
+                    "【本轮】用老大的说话方式回：极短、不解释、不客套。"
+                    if imitate
+                    else "【本轮】用你自己本来的性格回（大肥鱼：嘴硬、爱吐槽、偶尔贪吃），别学老大。"
+                )
+                mood = ""
+                if any(k in text for k in negs):
+                    mood = "【本轮】她态度冲，用一句损话怼回去（不带脏字、不闹脾气），说完就翻篇。"
+                elif any(k in text for k in poss):
+                    mood = "【本轮】她态度好，撒娇说一句甜的（贴贴/抱抱/姐姐最好这种），别用脏话、别说教。"
+                req.system_prompt += "\n\n" + mode + (("\n" + mood) if mood else "")
+                logger.info("[mixed] 替身=%s 态度=%s", imitate, "neg" if any(k in text for k in negs) else ("pos" if any(k in text for k in poss) else "normal"))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[mixed] 模式选择失败: %s", exc)
+
         try:
             text = getattr(event, "message_str", "") or ""
             if any(k in text for k in self.MEMORY_HINTS):
@@ -473,6 +536,21 @@ class BudgetGuard(Star):
                     logger.info("[memory] 自动注入 %d 条记忆", len(hits))
         except Exception as exc:  # noqa: BLE001
             logger.warning("[memory] 自动检索失败: %s", exc)
+
+        # 指定的会话里，对方说的有分量的话自动入库（不只靠模型主动调工具）
+        try:
+            umo = event.unified_msg_origin
+            auto_umos = set(self.cfg.get("auto_memory_umos") or [])
+            if umo in auto_umos:
+                text = (getattr(event, "message_str", "") or "").strip()
+                keywords = self.cfg.get("auto_memory_keywords") or []
+                meaningful = len(text) >= 12 or any(k in text for k in keywords)
+                qq, name = self._sender(event)
+                if text and meaningful and qq not in (self.cfg.get("super_admins") or []):
+                    self.memory.append(text[:200], "global", name or qq)
+                    logger.info("[memory] 自动记住 %s 的一句话", qq)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[memory] 自动记录失败: %s", exc)
 
     @filter.after_message_sent()
     async def mark_group_warm(self, event: AstrMessageEvent) -> None:
@@ -490,6 +568,43 @@ class BudgetGuard(Star):
         except Exception:  # noqa: BLE001
             return
 
+    def _apply_sticker(self, result) -> None:
+        """把 [[sticker]] / [[sticker:名字]] 换成一张本地表情图。"""
+        if Image is None:
+            return
+        folder = self.cfg.get("sticker_dir") or str(PLUGIN_DIR.parent.parent / "表情包")
+        base = Path(folder)
+        if not base.is_dir():
+            return
+        pattern = re.compile(r"\[\[sticker(?::([^\]\n]{1,40}))?\]\]")
+        want = None
+        hit = False
+        for comp in result.chain:
+            if comp.__class__.__name__ != "Plain":
+                continue
+            text = getattr(comp, "text", "") or ""
+            match = pattern.search(text)
+            if not match:
+                continue
+            hit = True
+            want = want or (match.group(1) or "").strip()
+            comp.text = pattern.sub("", text).strip()
+        if not hit:
+            return
+        files = [p for p in base.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif")]
+        if not files:
+            return
+        chosen = None
+        if want:
+            chosen = next((p for p in files if want in p.name), None)
+        if chosen is None:
+            chosen = random.choice(files)
+        try:
+            result.chain.append(Image.fromFileSystem(str(chosen)))
+            logger.info("[sticker] 发送表情 %s", chosen.name)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[sticker] 表情发送失败: %s", exc)
+
     @filter.on_decorating_result()
     async def finalize_reply(self, event: AstrMessageEvent) -> None:
         """先摘好感度标记，再按上限截断。"""
@@ -500,6 +615,20 @@ class BudgetGuard(Star):
 
         if self.fav is not None:
             self._apply_favor_tag(event, result)
+
+        self._apply_sticker(result)
+
+        # 短回复折成一行：模型爱写两句换行，看着像连发两条
+        try:
+            plain = [comp for comp in result.chain if comp.__class__.__name__ == "Plain"]
+            total_chars = sum(len((getattr(c, "text", "") or "")) for c in plain)
+            if total_chars <= 120:
+                for comp in plain:
+                    txt = getattr(comp, "text", "") or ""
+                    if "\n" in txt:
+                        comp.text = re.sub(r"[ \t]*\n+[ \t]*", " ", txt).strip()
+        except Exception:  # noqa: BLE001
+            pass
 
         limit = int(self.cfg.get("max_reply_chars", 500) or 0)
         if limit <= 0:
@@ -604,6 +733,105 @@ class BudgetGuard(Star):
         GroupChatContext.need_active_reply = need_active_reply_with_boost
         GroupChatContext._budget_guard_patched = True
         logger.info("[budget] 已启用群聊关键词加权插话")
+        try:
+            import asyncio as _asyncio
+            _asyncio.create_task(self._proactive_loop())
+            logger.info("[proactive] 主动私聊调度已启动")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[proactive] 启动失败: %s", exc)
+
+
+    # ---------- 主动私聊 ----------
+
+    async def _proactive_loop(self) -> None:
+        import asyncio
+
+        await asyncio.sleep(40)
+        while True:
+            try:
+                await self._proactive_tick()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[proactive] tick 失败: %s", exc)
+            await asyncio.sleep(60)
+
+    async def _proactive_make_text(self, umo: str, target: dict) -> str:
+        try:
+            provider = await self.context.get_using_provider_async(umo)
+            if provider is not None:
+                hint = target.get("prompt") or "主动找对方说一句话，1~10 个字，口语，不解释为什么找他"
+                resp = await provider.text_chat(
+                    prompt=hint,
+                    session_id="proactive:" + umo,
+                    system_prompt=target.get("persona_hint") or None,
+                )
+                txt = (getattr(resp, "completion_text", "") or "").strip()
+                if txt:
+                    return txt[:80]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[proactive] 生成文案失败: %s", exc)
+        pool = self.cfg.get("proactive_pool") or ["在干嘛", "睡了没", "忙啥呢"]
+        return random.choice(pool)
+
+    async def _proactive_tick(self) -> None:
+        cfg = self.cfg.get("proactive") or {}
+        if not cfg.get("enabled"):
+            return
+        now = datetime.now()
+        qs = int(cfg.get("quiet_start", 0) or 0)
+        qe = int(cfg.get("quiet_end", 8) or 0)
+        in_quiet = (qs <= now.hour < qe) if qs < qe else (now.hour >= qs or now.hour < qe)
+        if in_quiet:
+            return
+        budget, _spent, ratio, _prob = self._status()
+        if budget > 0 and ratio >= 0.9:
+            return
+        bot = self._aiocqhttp_bot()
+        if bot is None:
+            return
+
+        state_path = PLUGIN_DIR / "proactive_state.json"
+        state = _read_json(state_path, {})
+        today = _today()
+        changed = False
+        for target in cfg.get("targets") or []:
+            umo = str(target.get("umo") or "")
+            uid = target.get("user_id")
+            if not umo or not uid:
+                continue
+            rec = dict(state.get(umo) or {})
+            if rec.get("date") != today:
+                rec = {"date": today, "count": 0, "last": rec.get("last", 0)}
+            gap = random.uniform(
+                float(target.get("min_hours", 4) or 4),
+                float(target.get("max_hours", 10) or 10),
+            ) * 3600
+            if now.timestamp() - float(rec.get("last", 0) or 0) < gap:
+                state[umo] = rec
+                continue
+            if int(rec.get("count", 0) or 0) >= int(target.get("max_per_day", 2) or 2):
+                state[umo] = rec
+                continue
+            if target.get("require_active_today") and rec.get("incoming_date") != today:
+                state[umo] = rec
+                continue
+            text = await self._proactive_make_text(umo, target)
+            if not text:
+                continue
+            try:
+                await bot.call_action(
+                    "send_private_msg",
+                    user_id=int(uid),
+                    message=[{"type": "text", "data": {"text": text}}],
+                )
+                rec["last"] = now.timestamp()
+                rec["count"] = int(rec.get("count", 0) or 0) + 1
+                state[umo] = rec
+                changed = True
+                logger.info("[proactive] 主动私聊 %s: %s", uid, text[:40])
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[proactive] 发送失败 %s: %s", uid, exc)
+        if changed:
+            _write_json(state_path, state)
 
     # ---------- 工具 ----------
 
@@ -720,6 +948,34 @@ class BudgetGuard(Star):
             return
         text = (getattr(event, "message_str", "") or "").strip()
         if not text:
+            return
+
+        # 切换人格（仅管理员私聊）
+        low = text.lower()
+        wants_xdd = "xdd" in low and any(k in text for k in ("切", "换", "用", "学", "变"))
+        wants_default = ("大肥鱼" in text or "默认" in text) and any(
+            k in text for k in ("切回", "换回", "恢复", "切到", "换成", "用")
+        )
+        if wants_xdd or wants_default:
+            umo = event.unified_msg_origin
+            if "FriendMessage" not in umo:
+                yield event.plain_result("切人格只在私聊里生效。")
+                event.stop_event()
+                return
+            target = "xdd" if wants_xdd else "default"
+            try:
+                cm = self.context.conversation_manager
+                cid = await cm.get_curr_conversation_id(umo)
+                if not cid:
+                    cid = await cm.new_conversation(umo, platform_id=event.get_platform_id())
+                await cm.update_conversation(umo, conversation_id=cid, persona_id=target)
+                label = "xdd（学你说话）" if target == "xdd" else "大肥鱼"
+                logger.info("[persona] %s 切换到 %s", umo, target)
+                yield event.plain_result(f"行，这个私聊换成 {label} 了。")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[persona] 切换失败: %s", exc)
+                yield event.plain_result(f"切换失败：{exc}")
+            event.stop_event()
             return
 
         remember_match = re.match(r"^记住[：:，,\s]*(.+)$", text)

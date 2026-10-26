@@ -47,7 +47,7 @@
   "warm_window_seconds": 180,
   "warm_reply_probability": 0.7,
   "inject_style_rules": true,
-  "global_style_rules": "【说话规则】\n1. 口语，别用 Markdown/列表/加粗；默认三四句、100 字内，要详细也别超 500 字。\n2. 称呼「你」，不叫主人，不搞恋爱，别每句带喵。\n3. 别当答题机器：可以先贫一句、岔开、抬杠；别科普、别罗列注意事项、别追问。\n4. @ 必须回；叫名字更积极；私聊尽量回。\n5. 对方提「上次/之前/记得」先用 search_memory 查；值得长期记的事用 remember 记。\n6. 不认识的人或事用 web_search 搜（结果只要 3 条）；搜不到就说不知道，不许编。",
+  "global_style_rules": "【说话规则】\n1. 口语，别用 Markdown/列表/加粗；默认三四句、100 字内，要详细也别超 500 字。\n2. 称呼「你」，不叫主人，不搞恋爱，别每句带喵。\n3. 别当答题机器：可以先贫一句、岔开、抬杠；别科普、别罗列注意事项、别追问。\n4. @ 必须回；叫名字更积极；私聊尽量回。\n5. 对方提「上次/之前/记得」先用 search_memory 查；值得长期记的事用 remember 记。\n6. 不认识的人或事用 web_search 搜（结果只要 3 条）；搜不到就说不知道，不许编。\n7. 一条消息只写一句，不换行、不分两行；想接着说就等对方先回。",
   "favorite_enabled": true,
   "favorite_dir": "",
   "favorite_default_score": 50,
@@ -60,5 +60,72 @@
   "super_admin_bypass_style": true,
   "super_admin_bypass_budget": true,
   "super_admin_bypass_length": true,
-  "max_replies_per_minute": 10
+  "max_replies_per_minute": 10,
+  "context_overrides": {
+    "qq-onebot:FriendMessage:3392926635": 16000
+  },
+  "auto_memory_umos": [
+    "qq-onebot:FriendMessage:3392926635"
+  ],
+  "mixed_mode_umos": {
+    "qq-onebot:FriendMessage:3392926635": 0.6
+  },
+  "attitude_positive_keywords": [
+    "谢谢",
+    "贴贴",
+    "抱抱",
+    "喜欢你",
+    "可爱",
+    "辛苦",
+    "亲亲",
+    "么么",
+    "好想你",
+    "乖",
+    "求你了",
+    "你最好了",
+    "爱你",
+    "嘿嘿"
+  ],
+  "attitude_negative_keywords": [
+    "滚",
+    "闭嘴",
+    "烦死",
+    "你有病",
+    "神经病",
+    "傻逼",
+    "废物",
+    "没用",
+    "别烦我",
+    "无语",
+    "懒得",
+    "你tm",
+    "你他妈",
+    "恶心",
+    "讨厌你",
+    "别烦"
+  ],
+  "proactive": {
+    "enabled": true,
+    "quiet_start": 1,
+    "quiet_end": 9,
+    "targets": [
+      {
+        "umo": "qq-onebot:FriendMessage:1044846381",
+        "user_id": 1044846381,
+        "min_hours": 4,
+        "max_hours": 9,
+        "max_per_day": 2,
+        "prompt": "用老大的口吻主动发一句话，1-8个字，不换行"
+      },
+      {
+        "umo": "qq-onebot:FriendMessage:3392926635",
+        "user_id": 3392926635,
+        "min_hours": 2,
+        "max_hours": 6,
+        "max_per_day": 1,
+        "prompt": "用老大那种短句主动问她一句，1-8个字，不换行，别客套",
+        "require_active_today": true
+      }
+    ]
+  }
 }

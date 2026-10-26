@@ -1,0 +1,15 @@
+{
+  "qq-onebot:FriendMessage:1044846381": {
+    "date": "2026-10-26",
+    "count": 1,
+    "last": 1792978683.757537
+  },
+  "qq-onebot:FriendMessage:3392926635": {
+    "date": "2026-10-26",
+    "count": 0,
+    "last": 1792735354.327781
+  },
+  "qq-onebot:GroupMessage:1059284378": {
+    "incoming_date": "2026-10-26"
+  }
+}
